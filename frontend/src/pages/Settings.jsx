@@ -90,7 +90,7 @@ export default function Settings() {
             <label className={`flex cursor-pointer items-start gap-3 rounded-md border p-4 transition-colors duration-200 ${provider === "emergent" ? "border-primary bg-[#EEF2FF]" : "border-border"}`}>
               <input type="radio" data-testid="provider-emergent" name="provider" checked={provider === "emergent"} onChange={() => setProvider("emergent")} className="mt-1" disabled={!isAdmin} />
               <div>
-                <div className="text-sm font-semibold">Emergent managed (default)</div>
+                <div className="text-sm font-semibold">Managed email service (default)</div>
                 <div className="text-xs text-[#52525B]">Zero setup. Sends from a verified shared domain.</div>
               </div>
             </label>
