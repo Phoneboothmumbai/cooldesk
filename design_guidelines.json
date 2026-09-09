@@ -1,0 +1,116 @@
+{
+  "theme_strategy": {
+    "default_theme": "light",
+    "rationale": "B2B operations tool requiring high data density, legibility, and a professional service-desk feel. Light theme provides clarity for long work sessions.",
+    "archetype": "Swiss & High-Contrast (Authority, Clarity, Truth)"
+  },
+  "colors": {
+    "background": {
+      "main": "#FAFAFA",
+      "surface": "#FFFFFF",
+      "inverse": "#0B1221"
+    },
+    "primary": {
+      "DEFAULT": "#002FA7",
+      "hover": "#002280",
+      "foreground": "#FFFFFF"
+    },
+    "accent": {
+      "urgent": "#E63946",
+      "warning": "#FFB703",
+      "success": "#2A9D8F"
+    },
+    "border": "#E4E4E7",
+    "text": {
+      "primary": "#09090B",
+      "secondary": "#52525B",
+      "muted": "#A1A1AA"
+    },
+    "rules": [
+      "No generic full-screen gradients.",
+      "Use 1px solid borders for separation instead of shadows.",
+      "Ensure minimum 4.5:1 contrast ratio for all text.",
+      "Teal green/blue (#1B93A4) and purple (#7351B7) are FORBIDDEN."
+    ]
+  },
+  "typography": {
+    "font_families": {
+      "heading": "'Manrope', sans-serif",
+      "body": "'IBM Plex Sans', sans-serif",
+      "mono": "'IBM Plex Mono', monospace"
+    },
+    "scale": {
+      "h1": "text-4xl sm:text-5xl font-extrabold tracking-tight",
+      "h2": "text-2xl sm:text-3xl font-bold tracking-tight",
+      "h3": "text-xl sm:text-2xl font-semibold",
+      "body": "text-sm sm:text-base leading-relaxed",
+      "label": "text-xs font-semibold uppercase tracking-[0.2em]"
+    },
+    "rules": [
+      "BANNED: Inter, Roboto, Open Sans for headings.",
+      "BANNED: Space Grotesk.",
+      "Always left-align labels and form inputs.",
+      "Use tight letter spacing for headings and wide spacing for small overlines."
+    ]
+  },
+  "visual_enhancers": {
+    "surfaces": "Grid Borders (The 'Technical' Look). Expose the skeleton, 1px subtle borders on right and bottom of grid items. Use flat backgrounds, avoid glassmorphism for admin dashboard to prevent visual refraction of data.",
+    "shadows": "Minimalist. Use sharp 1px borders instead of soft drop shadows to define depth.",
+    "corners": "Subtle roundness, maximum 6px (rounded-md) border-radius."
+  },
+  "layouts_and_grids": {
+    "dashboard": {
+      "style": "High Density Grid",
+      "columns": "grid-cols-1 md:grid-cols-3 lg:grid-cols-4",
+      "gap": "gap-4 or gap-6",
+      "rules": "Every pixel must be utilized. Use h-full on children to stretch."
+    },
+    "public_form": {
+      "style": "The 'Tetris' Grid (Asymmetrical)",
+      "columns": "grid-cols-1 md:grid-cols-12",
+      "gap": "gap-8",
+      "rules": "Hero/Image side takes 5 cols, Form takes 7 cols. Massive spacing (p-8 to p-12) inside the form container."
+    }
+  },
+  "components_strategy": {
+    "buttons": "Sharp, rectangular or slightly rounded (rounded-md). High contrast background. Always include hover transition.",
+    "forms": "Use Shadcn Form, Input, Select, Textarea. Large touch targets. Left-aligned labels. Use clear validation error states (Signal Red).",
+    "tables": "Dense rows, zebra striping optional but 1px bottom border is mandatory. Monospaced font for IDs and Dates.",
+    "navigation": "Sidebar for Admin Dashboard (dark inverse background or stark white with right border). Top nav for public form (Solid white background, bottom border, DO NOT USE TRANSPARENT).",
+    "alerts": "Use Sonner for toasts (bottom-right positioning)."
+  },
+  "motion": {
+    "interactions": "Micro-interactions only. Hover states must shift color/brightness. Avoid heavy page transitions in the dashboard.",
+    "rules": "Respect prefers-reduced-motion. Add transition-colors duration-200 for all interactive elements. Do not use transition-all."
+  },
+  "icons": {
+    "library": "@phosphor-icons/react",
+    "style": "Duotone or Regular weight for dashboard. Clear, geometric, highly legible at small sizes.",
+    "install_command": "npm install @phosphor-icons/react or yarn add @phosphor-icons/react"
+  },
+  "image_urls": [
+    {
+      "category": "public_form_hero",
+      "url": "https://images.unsplash.com/photo-1698479603408-1a66a6d9e80f?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1NzR8MHwxfHNlYXJjaHwyfHxodmFjJTIwaW5zdGFsbGF0aW9ufGVufDB8fHx8MTc4ODk3MDc4Mnww&ixlib=rb-4.1.0&q=85",
+      "description": "Group of air conditioners. Use as a side image or hero overlay on the public dealer complaint form to establish context."
+    },
+    {
+      "category": "admin_login_background",
+      "url": "https://images.unsplash.com/photo-1488972685288-c3fd157d7c7a?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NTYxNzV8MHwxfHNlYXJjaHwxfHxpbmR1c3RyaWFsJTIwYWJzdHJhY3QlMjBhcmNoaXRlY3R1cmV8ZW58MHx8fHwxNzg4OTcwNzgyfDA&ixlib=rb-4.1.0&q=85",
+      "description": "Low angle photography of gray building architecture. Use as a subtle, high-contrast industrial background for the agent/admin login page."
+    }
+  ],
+  "accessibility": {
+    "contrast": "Strict adherence to minimum 4.5:1 ratio.",
+    "testing": "All interactive elements (buttons, inputs, filters, links) MUST include data-testid attribute in kebab-case."
+  },
+  "UNIVERSAL_GUIDELINES_FOR_MAIN_AGENT": [
+    "Create depth through 1px crisp borders rather than soft shadows.",
+    "Do NOT center align the app container (.App { text-align: center; } is banned). Left-align dense data.",
+    "Use 2x more padding than usual for public forms to create breathing room.",
+    "Never use generic AI assistant emojis.",
+    "Prioritize reusing Shadcn components (tables, dialogs, forms, dropdowns).",
+    "Never use transparent backgrounds on headers or overlays.",
+    "Use @phosphor-icons/react for all iconography."
+  ]
+}
