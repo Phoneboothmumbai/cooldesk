@@ -244,6 +244,97 @@ class TestSettings:
         assert r.json()["ok"] is True
 
 
+# ---------------- Distributor / CC / Reply threading ----------------
+class TestDistributorRouting:
+    _brand_id = None
+    _brand_code = None
+    _ticket_id = None
+    _ticket_number = None
+    _distributor = f"test_dist_{uuid.uuid4().hex[:6]}@test.com"
+
+    def test_set_distributor(self, api, admin_headers):
+        r = api.put(f"{BASE_URL}/api/settings", headers=admin_headers, json={
+            "default_stakeholders": [ADMIN_EMAIL],
+            "distributor_email": TestDistributorRouting._distributor,
+            "email_provider": "emergent",
+        })
+        assert r.status_code == 200, r.text
+        assert r.json()["distributor_email"] == TestDistributorRouting._distributor
+
+    def test_get_settings_returns_distributor(self, api, admin_headers):
+        r = api.get(f"{BASE_URL}/api/settings", headers=admin_headers)
+        assert r.status_code == 200
+        assert r.json()["distributor_email"] == TestDistributorRouting._distributor
+
+    def test_create_brand_with_routing(self, api, admin_headers):
+        code = f"TD{uuid.uuid4().hex[:4].upper()}"
+        r = api.post(f"{BASE_URL}/api/brands", headers=admin_headers, json={
+            "name": f"TEST_ DistBrand {code}", "code": code,
+            "catch_all_emails": ["catchall@example.com", TestDistributorRouting._distributor],
+            "routing": {"installation": ["inst@example.org"], "repair": [], "service": []},
+            "active": True,
+        })
+        assert r.status_code == 200, r.text
+        TestDistributorRouting._brand_id = r.json()["id"]
+        TestDistributorRouting._brand_code = r.json()["code"]
+
+    def test_public_ticket_routing_structure(self, api, admin_headers):
+        dealer = "dealer_test@example.com"
+        r = api.post(f"{BASE_URL}/api/public/tickets", json={
+            "brand_id": TestDistributorRouting._brand_id,
+            "complaint_type": "installation",
+            "subject": "TEST_ dist routing", "description": "d",
+            "customer_name": "TEST_ C", "customer_phone": "1",
+            "dealer_name": "TEST_ D", "dealer_phone": "1",
+            "dealer_email": dealer,
+        })
+        assert r.status_code == 200, r.text
+        tn = r.json()["ticket_number"]
+        TestDistributorRouting._ticket_number = tn
+        # Fetch full ticket to validate structure
+        tickets = api.get(f"{BASE_URL}/api/tickets?q={tn}", headers=admin_headers).json()
+        assert len(tickets) == 1
+        t = tickets[0]
+        TestDistributorRouting._ticket_id = t["id"]
+        dist = TestDistributorRouting._distributor
+        assert t["distributor_email"] == dist
+        assert dist not in t["cc"], f"distributor must be de-duplicated OUT of cc; cc={t['cc']}"
+        # cc must contain catchall, installation route, and dealer email (each once)
+        for expected in ["catchall@example.com", "inst@example.org", dealer]:
+            assert expected in t["cc"], f"missing {expected} in cc={t['cc']}"
+        # exactly-once
+        assert len(t["cc"]) == len(set(t["cc"]))
+        # collaborators = to + cc
+        assert t["collaborators"][0] == dist
+        assert set(t["collaborators"][1:]) == set(t["cc"])
+
+    def test_public_reply_ok(self, api, admin_headers):
+        tid = TestDistributorRouting._ticket_id
+        r = api.post(f"{BASE_URL}/api/tickets/{tid}/reply", headers=admin_headers,
+                     json={"message": "TEST_ public reply", "internal": False})
+        assert r.status_code == 200, r.text
+        thread = r.json()["thread"]
+        assert any(e["message"] == "TEST_ public reply" and e["internal"] is False for e in thread)
+
+    def test_internal_reply_ok(self, api, admin_headers):
+        tid = TestDistributorRouting._ticket_id
+        r = api.post(f"{BASE_URL}/api/tickets/{tid}/reply", headers=admin_headers,
+                     json={"message": "TEST_ internal note", "internal": True})
+        assert r.status_code == 200
+        thread = r.json()["thread"]
+        assert any(e["message"] == "TEST_ internal note" and e["internal"] is True for e in thread)
+
+    def test_cleanup_brand(self, api, admin_headers):
+        if TestDistributorRouting._brand_id:
+            api.delete(f"{BASE_URL}/api/brands/{TestDistributorRouting._brand_id}", headers=admin_headers)
+        # revert distributor to admin default
+        api.put(f"{BASE_URL}/api/settings", headers=admin_headers, json={
+            "default_stakeholders": [ADMIN_EMAIL],
+            "distributor_email": ADMIN_EMAIL,
+            "email_provider": "emergent",
+        })
+
+
 # ---------------- Meta ----------------
 def test_meta(api):
     r = api.get(f"{BASE_URL}/api/meta")

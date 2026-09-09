@@ -165,22 +165,32 @@ export default function TicketDetail() {
 
           <div className="rounded-md border border-border bg-white p-5">
             <h3 className="mb-3 flex items-center justify-between text-xs font-semibold uppercase tracking-[0.2em] text-[#A1A1AA]">
-              Collaborators (CC)
+              Recipients (one thread)
               <span className={`rounded px-1.5 py-0.5 text-[10px] ${t.email_status === "sent" ? "bg-[#E7F6F3] text-[#1E7168]" : "bg-[#F4F4F5] text-[#52525B]"}`}>
                 {t.email_status}
               </span>
             </h3>
-            {t.collaborators?.length ? (
+            {t.distributor_email && (
+              <div className="mb-2">
+                <span className="mr-2 inline-block rounded bg-[#EEF2FF] px-1.5 py-0.5 text-[10px] font-bold uppercase text-[#002FA7]">To</span>
+                <span className="text-sm text-[#52525B]">{t.distributor_email}</span>
+              </div>
+            )}
+            <div className="mb-1 text-[10px] font-bold uppercase text-[#A1A1AA]">CC</div>
+            {(t.cc || t.collaborators || []).filter((c) => c !== t.distributor_email).length ? (
               <ul className="space-y-1.5" data-testid="collaborators-list">
-                {t.collaborators.map((c) => (
+                {(t.cc || t.collaborators || []).filter((c) => c !== t.distributor_email).map((c) => (
                   <li key={c} className="flex items-center gap-2 text-sm text-[#52525B]">
                     <EnvelopeSimple size={14} className="text-primary" /> {c}
                   </li>
                 ))}
               </ul>
             ) : (
-              <p className="text-sm text-[#A1A1AA]">No stakeholders configured for this brand.</p>
+              <p className="text-sm text-[#A1A1AA]">No CC recipients configured.</p>
             )}
+            <p className="mt-3 border-t border-border pt-3 text-xs text-[#A1A1AA]">
+              Posting a public reply emails this whole group in the same thread. Internal notes stay private.
+            </p>
           </div>
         </div>
       </div>

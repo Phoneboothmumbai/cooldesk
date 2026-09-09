@@ -36,10 +36,7 @@ ADMIN_EMAIL = os.environ['ADMIN_EMAIL']
 ADMIN_PASSWORD = os.environ['ADMIN_PASSWORD']
 APP_BASE_URL = os.environ.get('APP_BASE_URL', '')
 
-EMAIL_BASE_URL = "https://integrations.emergentagent.com"
-EMAIL_KEY = os.environ.get('EMERGENT_EMAIL_KEY')
 EMAIL_FROM_NAME = os.environ.get('EMAIL_FROM_NAME', 'CoolDesk')
-EMAIL_REPLY_TO = os.environ.get('EMAIL_REPLY_TO')
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -98,7 +95,7 @@ async def require_admin(user: dict = Depends(get_current_user)) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Email (Emergent-managed Resend) — guardrail gate
+# Email (Resend) — guardrail gate
 # ---------------------------------------------------------------------------
 _SHORTENERS = ("bit.ly", "tinyurl.com", "t.co", "is.gd", "cutt.ly", "goo.gl", "rebrand.ly")
 _CRED_ASK = ("reply with your password", "reply with the code", "send your password", "cvv",
@@ -173,47 +170,41 @@ def _assert_safe_email(subject: str, html: str) -> None:
                 raise ValueError(f"Anchor text {m.group(1)!r} != real link host {real!r} (G3)")
 
 
-async def send_via_emergent(to: List[str], subject: str, html: str) -> Optional[str]:
-    if not EMAIL_KEY:
-        logger.warning("EMERGENT_EMAIL_KEY not set; skipping email send")
-        return None
-    payload = {"to": to, "subject": subject, "html": html, "from_name": EMAIL_FROM_NAME}
-    if EMAIL_REPLY_TO:
-        payload["contact_email"] = EMAIL_REPLY_TO
-    async with httpx.AsyncClient(timeout=30) as http_client:
-        resp = await http_client.post(
-            f"{EMAIL_BASE_URL}/api/v1/email/send",
-            headers={"X-Email-Key": EMAIL_KEY},
-            json=payload,
-        )
-    resp.raise_for_status()
-    return resp.json().get("id")
-
-
 async def send_via_resend(to: List[str], subject: str, html: str,
-                          api_key: str, from_email: str, from_name: str) -> Optional[str]:
+                          api_key: str, from_email: str, from_name: str,
+                          cc: Optional[List[str]] = None,
+                          reply_to: Optional[List[str]] = None) -> Optional[str]:
     from_addr = f"{from_name} <{from_email}>" if from_name else from_email
+    body = {"from": from_addr, "to": to, "subject": subject, "html": html}
+    if cc:
+        body["cc"] = cc
+    if reply_to:
+        body["reply_to"] = reply_to
     async with httpx.AsyncClient(timeout=30) as http_client:
         resp = await http_client.post(
             "https://api.resend.com/emails",
             headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-            json={"from": from_addr, "to": to, "subject": subject, "html": html},
+            json=body,
         )
     if resp.status_code >= 400:
         raise ValueError(f"Resend error {resp.status_code}: {resp.text}")
     return resp.json().get("id")
 
 
-async def dispatch_email(*, to: List[str], subject: str, html: str, settings: dict) -> Optional[str]:
+async def dispatch_email(*, to: List[str], subject: str, html: str, settings: dict,
+                         cc: Optional[List[str]] = None,
+                         reply_to: Optional[List[str]] = None) -> Optional[str]:
     _assert_safe_email(subject, html)  # anti-phishing gate on EVERY send path
-    provider = settings.get("email_provider", "emergent")
-    if provider == "resend" and settings.get("resend_api_key") and settings.get("resend_from_email"):
-        return await send_via_resend(
-            to, subject, html,
-            settings["resend_api_key"], settings["resend_from_email"],
-            settings.get("resend_from_name", ""),
-        )
-    return await send_via_emergent(to, subject, html)
+    cc = cc or []
+    api_key = settings.get("resend_api_key")
+    from_email = settings.get("resend_from_email")
+    if not (api_key and from_email):
+        logger.warning("Resend not configured (missing API key or from-email); skipping email send")
+        return None
+    return await send_via_resend(
+        to, subject, html, api_key, from_email,
+        settings.get("resend_from_name", ""), cc=cc, reply_to=reply_to,
+    )
 
 
 def build_ticket_email(ticket: dict) -> str:
@@ -315,7 +306,8 @@ class ReplyInput(BaseModel):
 
 class SettingsInput(BaseModel):
     default_stakeholders: List[str] = []
-    email_provider: str = "emergent"  # "emergent" | "resend"
+    distributor_email: Optional[str] = ""
+    email_provider: str = "resend"  # only Resend is supported
     resend_api_key: Optional[str] = None  # blank/None keeps existing
     resend_from_email: Optional[str] = ""
     resend_from_name: Optional[str] = ""
@@ -435,13 +427,14 @@ async def public_brands():
 async def get_settings() -> dict:
     s = await db.settings.find_one({"id": "global"}, {"_id": 0})
     if not s:
-        s = {"id": "global", "default_stakeholders": [], "email_provider": "emergent",
+        s = {"id": "global", "default_stakeholders": [], "email_provider": "resend",
              "resend_api_key": "", "resend_from_email": "", "resend_from_name": ""}
         await db.settings.insert_one(dict(s))
-    s.setdefault("email_provider", "emergent")
+    s.setdefault("email_provider", "resend")
     s.setdefault("resend_api_key", "")
     s.setdefault("resend_from_email", "")
     s.setdefault("resend_from_name", "")
+    s.setdefault("distributor_email", ADMIN_EMAIL.lower())
     return s
 
 
@@ -450,7 +443,8 @@ def _public_settings(s: dict) -> dict:
     return {
         "id": s.get("id", "global"),
         "default_stakeholders": s.get("default_stakeholders", []),
-        "email_provider": s.get("email_provider", "emergent"),
+        "distributor_email": s.get("distributor_email", ADMIN_EMAIL.lower()),
+        "email_provider": "resend",
         "resend_from_email": s.get("resend_from_email", ""),
         "resend_from_name": s.get("resend_from_name", ""),
         "resend_configured": bool(key),
@@ -468,7 +462,8 @@ async def write_settings(data: SettingsInput, admin: dict = Depends(require_admi
     current = await get_settings()
     update = {
         "default_stakeholders": data.default_stakeholders,
-        "email_provider": data.email_provider if data.email_provider in ("emergent", "resend") else "emergent",
+        "distributor_email": (data.distributor_email or "").strip().lower() or ADMIN_EMAIL.lower(),
+        "email_provider": "resend",
         "resend_from_email": (data.resend_from_email or "").strip(),
         "resend_from_name": (data.resend_from_name or "").strip(),
     }
@@ -499,7 +494,7 @@ async def test_email(admin: dict = Depends(require_admin)):
         email_id = await dispatch_email(to=[admin["email"]], subject="CoolDesk test email",
                                         html=html, settings=settings)
         return {"ok": True, "email_id": email_id, "sent_to": admin["email"],
-                "provider": settings.get("email_provider", "emergent")}
+                "provider": "resend"}
     except Exception as e:
         logger.error(f"Test email failed: {e}")
         raise HTTPException(status_code=502, detail=f"Send failed: {e}")
@@ -537,10 +532,18 @@ async def create_ticket(data: TicketCreate):
     if not brand:
         raise HTTPException(status_code=400, detail="Invalid or inactive brand")
     settings = await get_settings()
-    collaborators = resolve_collaborators(brand, data.complaint_type, settings)
+    company_emails = resolve_collaborators(brand, data.complaint_type, settings)
     dealer_email = (data.dealer_email or "").strip().lower()
-    if dealer_email and dealer_email not in collaborators:
-        collaborators.append(dealer_email)  # keep the dealer in the loop
+    distributor = (settings.get("distributor_email") or ADMIN_EMAIL).strip().lower()
+    # ONE email thread: distributor is To; dealer + all brand company IDs are CC.
+    cc = []
+    for e in company_emails + ([dealer_email] if dealer_email else []):
+        e = (e or "").strip().lower()
+        if e and e != distributor and e not in cc:
+            cc.append(e)
+    to = [distributor]
+    reply_to = [distributor] + cc  # any reply reaches the whole group
+    collaborators = to + cc
     now = datetime.now(timezone.utc).isoformat()
     priority = data.priority if data.priority in PRIORITIES else "normal"
     ticket = {
@@ -555,14 +558,15 @@ async def create_ticket(data: TicketCreate):
         "customer_address": data.customer_address.strip(), "city": data.city.strip(),
         "dealer_name": data.dealer_name.strip(), "dealer_phone": data.dealer_phone.strip(),
         "dealer_email": dealer_email,
+        "distributor_email": distributor, "cc": cc,
         "collaborators": collaborators, "assigned_agent": None,
         "thread": [], "email_status": "pending",
         "created_at": now, "updated_at": now,
     }
-    if collaborators:
+    if to:
         try:
             email_id = await dispatch_email(
-                to=collaborators,
+                to=to, cc=cc, reply_to=reply_to,
                 subject=f'[{ticket["ticket_number"]}] {ticket["brand_name"]} '
                         f'{ticket["complaint_type"].title()} — {ticket["subject"]}',
                 html=build_ticket_email(ticket),
@@ -643,6 +647,26 @@ async def update_ticket(ticket_id: str, data: TicketUpdate, user: dict = Depends
     return await db.tickets.find_one({"id": ticket_id}, {"_id": 0})
 
 
+def build_reply_email(ticket: dict, entry: dict) -> str:
+    return (
+        f'<table role="presentation" width="100%" style="max-width:640px;margin:0 auto;'
+        f'font-family:Arial,Helvetica,sans-serif"><tr><td style="padding:24px">'
+        f'<p style="font-size:12px;letter-spacing:2px;text-transform:uppercase;color:#002FA7;'
+        f'margin:0 0 4px;font-weight:700">Ticket Update</p>'
+        f'<h1 style="font-size:20px;color:#09090B;margin:0 0 4px">{escape(ticket["ticket_number"])}'
+        f' &middot; {escape(ticket["brand_name"])}</h1>'
+        f'<p style="font-size:13px;color:#52525B;margin:0 0 16px">{escape(ticket.get("subject",""))}</p>'
+        f'<div style="border-left:3px solid #002FA7;padding:8px 14px;background:#F8FAFF">'
+        f'<p style="font-size:13px;color:#09090B;margin:0 0 4px;font-weight:700">'
+        f'{escape(entry["author"])}</p>'
+        f'<p style="font-size:13px;color:#52525B;margin:0;white-space:pre-wrap">'
+        f'{escape(entry["message"])}</p></div>'
+        f'<p style="font-size:11px;color:#A1A1AA;margin:24px 0 0">Reply to this email to update '
+        f'everyone on this complaint. Sent by {escape(EMAIL_FROM_NAME)}.</p>'
+        f'</td></tr></table>'
+    )
+
+
 @api_router.post("/tickets/{ticket_id}/reply")
 async def add_reply(ticket_id: str, data: ReplyInput, user: dict = Depends(get_current_user)):
     ticket = await db.tickets.find_one({"id": ticket_id})
@@ -654,6 +678,21 @@ async def add_reply(ticket_id: str, data: ReplyInput, user: dict = Depends(get_c
     await db.tickets.update_one({"id": ticket_id},
                                 {"$push": {"thread": entry},
                                  "$set": {"updated_at": entry["created_at"]}})
+    # A public reply notifies the whole group in the SAME thread; internal notes do not.
+    if not data.internal:
+        settings = await get_settings()
+        distributor = (ticket.get("distributor_email") or settings.get("distributor_email") or ADMIN_EMAIL).strip().lower()
+        cc = [e for e in ticket.get("collaborators", []) if e and e.strip().lower() != distributor]
+        try:
+            await dispatch_email(
+                to=[distributor], cc=cc, reply_to=[distributor] + cc,
+                subject=f'Re: [{ticket["ticket_number"]}] {ticket["brand_name"]} '
+                        f'{ticket.get("complaint_type","").title()} — {ticket.get("subject","")}',
+                html=build_reply_email(ticket, entry),
+                settings=settings,
+            )
+        except Exception as e:
+            logger.error(f"Reply email failed: {e}")
     return await db.tickets.find_one({"id": ticket_id}, {"_id": 0})
 
 
