@@ -36,6 +36,7 @@ const empty = {
   city: "",
   dealer_name: "",
   dealer_phone: "",
+  dealer_email: "",
 };
 
 export default function PublicForm() {
@@ -259,6 +260,9 @@ export default function PublicForm() {
                   <Input data-testid="dealer-phone-input" value={form.dealer_phone} onChange={set("dealer_phone")} required />
                 </Field>
               </div>
+              <Field label="Dealer email (you'll be kept in the loop)" className="mt-5">
+                <Input data-testid="dealer-email-input" type="email" value={form.dealer_email} onChange={set("dealer_email")} placeholder="you@dealership.com" required />
+              </Field>
             </Section>
 
             <Button

@@ -159,6 +159,7 @@ export default function TicketDetail() {
             {(t.customer_address || t.city) && <Info icon={MapPin} text={[t.customer_address, t.city].filter(Boolean).join(", ")} />}
             <div className="mt-3 border-t border-border pt-3 text-xs text-[#A1A1AA]">
               Raised by dealer <span className="font-semibold text-[#52525B]">{t.dealer_name}</span> · {t.dealer_phone}
+              {t.dealer_email && <span className="block break-all">{t.dealer_email}</span>}
             </div>
           </div>
 

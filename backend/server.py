@@ -233,6 +233,7 @@ def build_ticket_email(ticket: dict) -> str:
         row("Location", ticket.get("city", "-")),
         row("Address", ticket.get("customer_address", "-")),
         row("Raised by (Dealer)", f'{ticket.get("dealer_name","-")} ({ticket.get("dealer_phone","-")})'),
+        row("Dealer Email", ticket.get("dealer_email") or "-"),
     ])
     link_html = ""
     if APP_BASE_URL.startswith("https://"):
@@ -298,6 +299,7 @@ class TicketCreate(BaseModel):
     city: str = ""
     dealer_name: str
     dealer_phone: str
+    dealer_email: Optional[str] = ""
 
 
 class TicketUpdate(BaseModel):
@@ -536,6 +538,9 @@ async def create_ticket(data: TicketCreate):
         raise HTTPException(status_code=400, detail="Invalid or inactive brand")
     settings = await get_settings()
     collaborators = resolve_collaborators(brand, data.complaint_type, settings)
+    dealer_email = (data.dealer_email or "").strip().lower()
+    if dealer_email and dealer_email not in collaborators:
+        collaborators.append(dealer_email)  # keep the dealer in the loop
     now = datetime.now(timezone.utc).isoformat()
     priority = data.priority if data.priority in PRIORITIES else "normal"
     ticket = {
@@ -549,6 +554,7 @@ async def create_ticket(data: TicketCreate):
         "customer_email": (data.customer_email or "").strip(),
         "customer_address": data.customer_address.strip(), "city": data.city.strip(),
         "dealer_name": data.dealer_name.strip(), "dealer_phone": data.dealer_phone.strip(),
+        "dealer_email": dealer_email,
         "collaborators": collaborators, "assigned_agent": None,
         "thread": [], "email_status": "pending",
         "created_at": now, "updated_at": now,
